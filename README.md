@@ -32,3 +32,13 @@ npm install
 # 4. Start the development server
 npm run dev
 ```
+
+Screenshots:
+
+**Connected State:**
+<img width="1000" height="1000" alt="image" src="https://github.com/user-attachments/assets/9acad875-f7b1-400b-a1c4-2bbad4fe43c3" />
+
+**Transaciton:**
+<img width="1000" height="1000" alt="image" src="https://github.com/user-attachments/assets/a689df89-8739-4148-aaa7-73f1db2f07a8" />
+
+
