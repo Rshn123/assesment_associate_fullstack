@@ -125,7 +125,7 @@ export function Home() {
   const handleTransfer = async () => {
     if (!validateAddress(recipient) || !validateAmount(Number(amount))) return;
     try {
-      const mistAmount = BigInt(amount);
+      const mistAmount = BigInt(Number(amount) * 10 ** 9);
       setLoading(true);
       const result = await transferSUI(recipient, mistAmount);
       setLoading(false);

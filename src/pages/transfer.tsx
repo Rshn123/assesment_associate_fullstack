@@ -27,8 +27,6 @@ function useTransferSUI() {
         chain: "sui:testnet",
       });
 
-      console.log(`Transfer successful! Digest: ${result.digest}`);
-
       return result;
     } catch (error) {
       console.error("Transfer failed:", error);
