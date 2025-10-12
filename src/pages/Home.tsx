@@ -1,81 +1,64 @@
-import { CustomButton } from "../components/CustomButton";
+import { useEffect, useState, type ChangeEvent } from "react";
 import {
   useCurrentWallet,
   useCurrentAccount,
   useDisconnectWallet,
   useSuiClient,
+  useSuiClientContext,
+  useSignAndExecuteTransaction,
 } from "@mysten/dapp-kit";
-import { WalletConnect } from "../components/WalletConnect";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { CustomButton } from "../components/CustomButton";
 import useTransferSUI from "./transfer";
+import { useToast } from "../hooks/ToastHook";
+import { getFullnodeUrl, SuiClient } from "@mysten/sui/client";
+import { Transaction } from "@mysten/sui/transactions";
+import { Header } from "../sections/Headers";
+import { AccountInfo } from "../sections/Accounts";
+import { SendSUI } from "../sections/SendUI";
+import { MintNFT } from "../sections/MintNFT";
 
 export function Home() {
+  //For using SUI sdk
   const client = useSuiClient();
-  const [balance, setBalance] = useState<string>("0");
-
-  // Extract transferSUI function from the custom hook
-  const { transferSUI } = useTransferSUI();
-  // State for input fields
-  const [recipient, setRecipient] = useState("");
-  const [amount, setAmount] = useState("");
-  // const [digest, setDigest] = useState("");
-  const [, setShowModal] = useState(false);
-  const { mutate: disconnect } = useDisconnectWallet();
-
-  // Handle "Send SUI" button click
-  const handleTransfer = async () => {
-    const mistAmount = BigInt(amount);
-    const result = await transferSUI(recipient, mistAmount);
-    console.log(result);
-    // setDigest(result.digest);
-  };
-  // Access wallet connection info and actions
   const currentWallet = useCurrentWallet();
   const currentAccount = useCurrentAccount();
+  const { mutate: disconnect } = useDisconnectWallet();
+  const { transferSUI } = useTransferSUI();
+  const { network } = useSuiClientContext();
+  const { showToast, ToastContainer } = useToast();
+  const { mutateAsync: signAndExecuteTransaction } =
+    useSignAndExecuteTransaction();
 
-  // For saving state
-  // const [, setCopied] = useState(false);
-
-  // Address error
+  //For preserving states
+  const [recipient, setRecipient] = useState("");
+  const [digest, setDigest] = useState("");
+  const [mintDigest, setMintDigest] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [balance, setBalance] = useState<string>("0");
   const [invalidAddressError, setInvalidAddressError] = useState("");
-
-  // Amount error
   const [invalidAmountError, setInvalidAmountError] = useState("");
+  const [transcation, setTransactions] = useState<any[]>([]);
 
-  // For copying address
-  // const copyToClipboard = async () => {
-  //   try {
-  //     await navigator.clipboard.writeText(currentAccount!.address!);
-  //     setCopied(true);
-  //     setTimeout(() => setCopied(false), 2000); // Reset after 2 seconds
-  //   } catch (err) {
-  //     console.error("Failed to copy!", err);
-  //   }
-  // };
-
+  // Fetch balance periodically
   useEffect(() => {
     if (!currentAccount) return;
-
     async function fetchBalance() {
       try {
-        const response = await client.getBalance({
+        const res = await client.getBalance({
           owner: currentAccount!.address,
           coinType: "0x2::sui::SUI",
         });
-        setBalance((Number(response.totalBalance) / 1e9).toFixed(3));
+        setBalance((Number(res.totalBalance) / 1e9).toFixed(3));
       } catch (error) {
         console.error("Failed to fetch balance:", error);
       }
     }
-
     fetchBalance();
-    const interval = setInterval(fetchBalance, 8000);
-    return () => clearInterval(interval);
-  }, [currentAccount, client]);
+  }, [client, currentAccount, network]);
 
-  // Validate a SUI-style (or Ethereum-like) address
+  // Validation
   const validateAddress = (value: string): boolean => {
-    // Example: 0x followed by 64 hex chars (SUI)
     const isValid = /^0x[a-fA-F0-9]{64}$/.test(value.trim());
     setInvalidAddressError(
       isValid || value === "" ? "" : "Invalid wallet address"
@@ -83,201 +66,133 @@ export function Home() {
     return isValid;
   };
 
-  // Validate amount
   const validateAmount = (value: number): boolean => {
-    const isValid = value >= 0;
-    setInvalidAmountError(isValid ? "" : "Insert value greater than 0");
+    const isValid = value > 0;
+    setInvalidAmountError(isValid ? "" : "Amount must be greater than 0");
     return isValid;
   };
 
-  // Handle amount change
+  // Inputs
   const handleAmountChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
+    const value = e.target.value;
     setAmount(value);
     validateAmount(Number(value));
   };
 
-  // // For handling connect button click
-  // const handleConnectClick = () => setShowModal(true);
-
-  //For handling disconnect button click
-  const handleDisconnectClick = () => {
-    disconnect();
-    setShowModal(false);
-  };
-
-  //For handling address change
   const handleAddressChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
+    const value = e.target.value;
     setRecipient(value);
     validateAddress(value);
   };
 
+  // Transaction history
+  useEffect(() => {
+    const client = new SuiClient({ url: getFullnodeUrl("testnet") });
+    const queryTransaction = async (address: string) => {
+      const result = await client.queryTransactionBlocks({
+        filter: { FromAddress: address },
+        limit: 100,
+        order: "descending",
+      });
+      setTransactions(result.data);
+    };
+    const address = currentAccount?.address;
+    if (address) queryTransaction(address);
+  }, [currentAccount?.address]);
+
+  // Mint NFT
+  const handleMintNft = async () => {
+    const tx = new Transaction();
+    tx.moveCall({
+      target:
+        "0x5ea6aafe995ce6506f07335a40942024106a57f6311cb341239abf2c3ac7b82f::nft::mint",
+      arguments: [
+        tx.pure.string("NFT"),
+        tx.pure.string("Sample NFT"),
+        tx.pure.string(
+          "https://xc6fbqjny4wfkgukliockypoutzhcqwjmlw2gigombpp2ynufaxa.arweave.net/uLxQwS3HLFUailocJWHupPJxQsli7aMgzmBe_WG0KC4"
+        ),
+      ],
+    });
+    const result = await signAndExecuteTransaction({
+      transaction: tx,
+      chain: "sui:testnet",
+    });
+    setMintDigest(result.digest);
+  };
+
+  // Transfer
+  const handleTransfer = async () => {
+    if (!validateAddress(recipient) || !validateAmount(Number(amount))) return;
+    try {
+      const mistAmount = BigInt(amount);
+      setLoading(true);
+      const result = await transferSUI(recipient, mistAmount);
+      setLoading(false);
+      setDigest(result.digest);
+      setTransactions([{ digest: result.digest }, ...transcation]);
+      showToast("Transaction successful.", "success");
+    } catch (err) {
+      console.error("Transfer failed:", err);
+    }
+  };
+
+  const handleDisconnectClick = () => disconnect();
+
+  const isConnected = currentWallet.connectionStatus === "connected";
+
   return (
     <div className="w-screen h-screen bg-[#0b0e11] text-gray-100 flex flex-col items-center justify-center">
-      <div className="w-screen h-screen bg-[#111418] rounded-2xl shadow-xl p-6">
-        {/* Header */}
-        <div className="flex justify-between items-center border-b border-gray-800 pb-4 mb-4">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 rounded-lg p-2">
-              <span className="font-bold text-white">SUI</span>
-            </div>
-            <h1 className="text-xl font-semibold">SUI Wallet</h1>
-          </div>
-
-          <div className="flex gap-6 text-sm text-gray-400">
-            <span className="hover:text-white cursor-pointer">Login</span>
-            <span className="hover:text-white cursor-pointer">Docs</span>
-            <span className="hover:text-white cursor-pointer">Discover</span>
-            <span className="hover:text-white cursor-pointer">About</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div>
-              {!(currentWallet.connectionStatus === "connected") ? (
-                <WalletConnect />
-              ) : (
-                <button
-                  onClick={handleDisconnectClick}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
-                >
-                  Disconnect Wallet
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-        {currentWallet.connectionStatus === "connected" ? (
-          <div>
-            {/* Main content grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Left panel */}
-              <div className="bg-[#161b20] rounded-xl p-4 flex flex-col justify-between">
-                <h2 className="text-lg mb-3">Send to:</h2>
-                <span className="">Address:</span>
-                <input
-                  type="text"
-                  placeholder="Type address..."
-                  value={recipient}
-                  onChange={handleAddressChange}
-                  className="w-full bg-[#1b1f25] border border-gray-700 rounded-lg p-2 text-sm  text-gray-300"
-                />
-                {invalidAddressError && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {invalidAddressError}
-                  </p>
-                )}
-
-                <span>Amount:</span>
-                <input
-                  type="text"
-                  placeholder="Type amount..."
-                  value={amount}
-                  onChange={handleAmountChange}
-                  className="w-full bg-[#1b1f25] border border-gray-700 rounded-lg p-2 text-sm text-gray-300"
-                />
-
-                {invalidAmountError && (
-                  <p className="text-red-500 text-xs mt-1">
-                    {invalidAmountError}
-                  </p>
-                )}
-
-                <div className="flex justify-between mb-3">
-                  <span>1 SUI</span>
-                  <span>$3.48</span>
-                </div>
-                <button
-                  onClick={handleTransfer}
-                  className="bg-green-600 hover:bg-green-700 rounded-lg py-2 text-sm font-semibold text-white"
-                >
-                  Send Transaction
-                </button>
-              </div>
-
-              {/* Chart area */}
-              <div className="md:col-span-2 bg-[#161b20] rounded-xl p-4">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg">Account Information</h2>
-                  <div className="flex gap-2 text-sm text-gray-400">
-                    <label className="text-blue-600">Network:</label>
-                    {currentAccount?.chains}
-                  </div>
-                </div>
-                <div className="flex">
-                  <div className="flex-2 bg-[#1b1f25] rounded-lg h-48 p-4 text-gray-400 text-sm">
-                    <p className="mb-2">
-                      <span className="text-white font-semibold">Address:</span>
-                    </p>
-                    <p className="break-all text-gray-10">
-                      {currentAccount!.address}
-                    </p>
-                  </div>
-
-                  {/* Balance Card */}
-                  <div className="flex-1 ml-4 bg-[#1b1f25] rounded-lg h-48 p-4 text-gray-400 text-sm">
-                    <p>
-                      <span className="text-white font-semibold">Balance:</span>
-                    </p>
-                    <p className="text-gray-300 text-lg font-medium">
-                      {`${balance} SUI`}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <h3 className="text-sm text-gray-400 mb-2">Recent Trades</h3>
-                  <div className="bg-[#1b1f25] rounded-lg p-3 text-xs text-gray-300">
-                    <div className="grid grid-cols-4 gap-2 mb-2 text-gray-500">
-                      <span>Account</span>
-                      <span>In</span>
-                      <span>Out</span>
-                      <span>Age</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <span>0x71...f3d</span>
-                      <span>2 ETH</span>
-                      <span>0.034 BTC</span>
-                      <span>14d ago</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <span>0x92...bd4</span>
-                      <span>5 UNI</span>
-                      <span>120 DOGE</span>
-                      <span>18d ago</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className=" mt-20">
-            <div className="flex justify-center">
-              <CustomButton
-                text={"View Docs"}
-                onClick={() => {
-                  window.open("https://kit.suiet.app/docs/QuickStart/");
-                }}
-                buttonStyle={
-                  "bg-[#e5e7ec] text-black w-52 hover:bg-gray-400 outline-none focus:outline-none"
-                }
+      <div className="w-screen h-screen bg-[#111418] rounded-2xl shadow-xl p-6 relative">
+        <Header
+          isConnected={isConnected}
+          onDisconnect={handleDisconnectClick}
+        />
+        {isConnected ? (
+          <main>
+            <AccountInfo
+              network={network}
+              currentAccount={currentAccount}
+              balance={balance}
+              transcation={transcation}
+            />
+            <div className="flex mt-2">
+              <SendSUI
+                recipient={recipient}
+                amount={amount}
+                invalidAddressError={invalidAddressError}
+                invalidAmountError={invalidAmountError}
+                handleAddressChange={handleAddressChange}
+                handleAmountChange={handleAmountChange}
+                handleTransfer={handleTransfer}
+                loading={loading}
+                digest={digest}
+              />
+              <MintNFT
+                handleMintNft={handleMintNft}
+                mintDigest={mintDigest}
+                loading={loading}
               />
             </div>
+          </main>
+        ) : (
+          <div className="mt-20 text-center">
+            <CustomButton
+              text="View Docs"
+              onClick={() =>
+                window.open("https://kit.suiet.app/docs/QuickStart/")
+              }
+              buttonStyle="bg-[#e5e7ec] text-black w-52 hover:bg-gray-400 outline-none"
+            />
             <img
               src="https://kit.suiet.app/img/trustedby.png"
               className="w-[1200px] mt-10 mx-auto"
-              alt=""
+              alt="trusted partners"
             />
           </div>
         )}
-
-        {/* Footer */}
-        <footer className="absolute bottom-0 left-0 w-full text-xs text-gray-500 text-center border-t border-gray-800 bg-[#111418] py-4">
-          © 2024 SUIWallet.io — Affiliate • Regulations • Terms • Docs •
-          Contacts
-        </footer>
       </div>
+      {ToastContainer}
     </div>
   );
 }

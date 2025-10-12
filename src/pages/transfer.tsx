@@ -6,7 +6,8 @@ import { Transaction } from "@mysten/sui/transactions";
 
 function useTransferSUI() {
   const { connectionStatus } = useCurrentWallet();
-  const { mutate: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const { mutateAsync: signAndExecuteTransaction } =
+    useSignAndExecuteTransaction();
 
   const transferSUI = async (recipient: string, amount: bigint) => {
     try {
@@ -21,12 +22,13 @@ function useTransferSUI() {
       tx.transferObjects([coin], tx.pure.address(recipient));
 
       // Execute the transaction using wallet.signAndExecuteTransactionBlock()
-      const result = signAndExecuteTransaction({
+      const result = await signAndExecuteTransaction({
         transaction: tx,
         chain: "sui:testnet",
       });
 
-      console.log("Transfer successful! Digest:");
+      console.log(`Transfer successful! Digest: ${result.digest}`);
+
       return result;
     } catch (error) {
       console.error("Transfer failed:", error);
