@@ -132,6 +132,8 @@ export function Home() {
       setDigest(result.digest);
       setTransactions([{ digest: result.digest }, ...transcation]);
       showToast("Transaction successful.", "success");
+      setAmount("");
+      setRecipient("");
     } catch (err) {
       console.error("Transfer failed:", err);
     }
